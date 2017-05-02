@@ -1,0 +1,166 @@
+========================================================
+css: rogers_rpres.css
+incremental: true
+<topic>openCyto</topic>
+<hr>
+<lecture>4</lecture>
+
+Clone this lecture
+=======================================================
+incremental: false
+
+https://github.com/rogerswt/openCyto_lecture
+
+<g>As usual, I suggest you create a new RStudio Project</g>
+
+Please check that your working directory to this project directory, and
+load the openCyto package
+```{r}
+library("openCyto")
+```
+
+What This is About
+=======================================================
+incremental: false
+The <code>openCyto</code> package is designed to facilitate the automated
+gating methods in sequential way to mimic the manual gating scheme.
+
+There are several new concepts in <code>openCyto</code>:
+
+* Using NetCDF to efficiently handle large data on small computers
+* gatingSet
+  * like a flowSet, but able to keep track of workflows
+* gatingTemplate
+  * a 'language' to describe (potentially) complex hierarchical gating schemes
+
+The Downside
+=======================================================
+incremental: false
+
+* It's among the worst-documented packages I've seen
+
+* I'm not super-familiar with its use
+
+* The graphics are a hodge-podge, depending on Trellis for lots of functionality
+  * Nice in many ways, crappy in others
+
+
+Get the openCyto package
+=======================================================
+incremental: false
+
+```{r, eval = FALSE}
+source("http://bioconductor.org/biocLite.R")
+biocLite("openCyto")
+```
+
+<g>There are a number of dependencies (flowWorkspace, rcppEigen, etc.)</g>
+
+Load the example data as a netCDF version of flowSet
+=======================================================
+incremental: false
+
+```{r}
+fcsFiles = dir(path = ".", pattern = "CytoTrol")
+ncfs  = read.ncdfFlowSet(fcsFiles)
+ncfs
+```
+
+Check out the gating template spreadsheet
+=======================================================
+incremental: false
+
+<pre></pre>
+![](gating_template_spreadsheet.png)
+
+Types of gating methods
+=======================================================
+incremental: false
+
+* mindensity
+  * We fit a kernel density estimator to the cells in the flowFrame and identify the two largest peaks. We then select as the cutpoint the value at which the minimum density is attained between the two peaks of interest.
+* singletGate
+  * The function constructs a singlet polygonGate using the prediction bands from a robust linear model trained on the area and height of one flow parameter (usually forward scatter).
+
+Types of gating methods (cont'd)
+=======================================================
+incremental: false
+* flowClust
+  * We cluster the observations in fr into K clusters. We set the cutpoint to be the point at which the density between the first and second smallest cluster centroids is minimum.
+* tailgate
+  * Gates the tail of a density using the derivative of a kernel density estimate
+
+Compensate, Transform, then make a gatingSet
+=======================================================
+incremental: false
+```{r}
+# compensation (always first!)
+compMat = compensation(keyword(ncfs[[1]])$SPILL)
+ncfs_comp = compensate(ncfs, compMat)
+
+# transformation
+params <- parameters(compMat)
+transFuncts <- estimateLogicle(ncfs[[1]], channels = params)
+ncfs_trans <- transform(ncfs_comp, transFuncts)
+
+# make a gatingSet
+gs = GatingSet(ncfs_trans)
+```
+
+Load the gating strategy from the spreadsheet
+=======================================================
+incremental: false
+```{r, fig.width=12, fig.height=6}
+gt_tcell = gatingTemplate("tcell3.csv")
+plot(gt_tcell)
+```
+
+Apply the gating strategy
+=======================================================
+incremental: false
+```{r}
+gating(gt_tcell, gs)
+```
+
+Hide uninteresting nodes
+=======================================================
+incremental: false
+```{r, results=FALSE}
+nodesToHide = c("/nonDebris/singlets/lymph/cd3/cd8+",
+                "/nonDebris/singlets/lymph/cd3/cd4+",
+                "/nonDebris/singlets/lymph/cd3/cd4-cd8-",
+                "/nonDebris/singlets/lymph/cd3/cd4+cd8-/CD45RA+",
+                "/nonDebris/singlets/lymph/cd3/cd4+cd8-/CCR7+",
+                "/nonDebris/singlets/lymph/cd3/cd4+cd8-/HLA+",
+                "/nonDebris/singlets/lymph/cd3/cd4+cd8-/CD38+",
+                "/nonDebris/singlets/lymph/cd3/cd4-cd8+/CD45RA+",
+                "/nonDebris/singlets/lymph/cd3/cd4-cd8+/CCR7+",
+                "/nonDebris/singlets/lymph/cd3/cd4-cd8+/HLA+",
+                "/nonDebris/singlets/lymph/cd3/cd4-cd8+/CD38+",
+                "/nonDebris/singlets/lymph/cd3/cd4+cd8+"
+                )
+lapply(nodesToHide, function(thisNode)setNode(gs, thisNode, FALSE))
+```
+
+Hide uninteresting nodes (cont'd)
+=======================================================
+incremental: false
+```{r, fig.width=12, fig.height=6}
+plot(gs[[1]])
+```
+
+Check the gating
+=======================================================
+incremental: false
+
+```{r}
+plotGate(gs[[1]])
+```
+
+Finally, report the gated populations
+=======================================================
+incremental: false
+
+```{r, size="huge"}
+getPopStats(gs[[1]])
+```{r}
